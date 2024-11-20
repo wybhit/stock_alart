@@ -90,7 +90,7 @@ def stock_info_a_code_name():
     # 创建一个空的DataFrame来存储结果
     return stock_info
 
-# 取美股交易日信息
+
 def get_last_trade_date(market = "A", range_days = 5):
     #获取A股最近一个交易日
     if market == "A":
