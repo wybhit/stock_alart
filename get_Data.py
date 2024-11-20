@@ -91,7 +91,7 @@ def stock_info_a_code_name():
     return stock_info
 
 # 取美股交易日信息
-def get_last_trade_date(market = "A", range_days = 365):
+def get_last_trade_date(market = "A", range_days = 5):
     #获取A股最近一个交易日
     if market == "A":
         keyWord = "XSHG"
@@ -101,13 +101,17 @@ def get_last_trade_date(market = "A", range_days = 365):
         keyWord = "HKG"
     stock_calendar = get_calendar(keyWord)
     #判断是否为开盘时间
-    schedule_time = stock_calendar.schedule(start_date=(datetime.now() - pd.Timedelta(days=5)).strftime('%Y-%m-%d'), 
-                                    end_date=(datetime.now()+pd.Timedelta(days=1)) .strftime('%Y-%m-%d'))
-    a = stock_calendar.open_at_time(schedule_time, pd.Timestamp(datetime.now(),tz='Asia/Shanghai'))
-    
-    
-    return a
-    
+    schedule_time = stock_calendar.schedule(start_date=(datetime.now() - pd.Timedelta(days=range_days)).strftime('%Y-%m-%d'), 
+                                    end_date=datetime.now().strftime('%Y-%m-%d'))
+    ts = schedule_time.loc[schedule_time.index[-1],'market_close']
+    now = datetime.now(ts.tz)
+
+
+    if now>ts.to_pydatetime():
+        return ts.to_pydatetime().strftime('%Y-%m-%d')
+    else:
+        ts = schedule_time.loc[schedule_time.index[-2],'market_close']
+        return ts.to_pydatetime().strftime('%Y-%m-%d')
 
 
 if __name__ == "__main__":
