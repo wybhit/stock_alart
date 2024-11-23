@@ -19,6 +19,6 @@ class ConfigTools:
 
 if __name__ == "__main__":
    
-    ConfigTools.set_config("Running.Settings","LastTradeDate","20241122")
+    ConfigTools.set_config("Running.Settings","LastTradeDate22","20241122")
     print(ConfigTools.get_config("Running.Settings","LastTradeDate"))
 

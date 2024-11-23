@@ -7,34 +7,54 @@ import akshare as ak
 from tools import ConfigTools
 
 class Get_Data_Tools:
-    def __init__(self):
+    def __init__(self,market = "A"):
+        if market == "A":
+            self.market = "XSHG"
+        elif market == "US":
+            self.market = "NYSE"
+        elif market == "HK":
+            self.market = "HKG"
+
         self.LastTradeDate = self.get_last_trade_date()
         #写入config文件
-        ConfigTools.set_config("Running.Settings","LastTradeDate",self.LastTradeDate)
-
-    @classmethod
-    def get_last_trade_date(self, market = "A", range_days = 5):
+        
+    
+    def get_trade_date(self,range_days = 1):
+        """
+        range_days: 获取最近range_days天的交易日
+        return: 如果在交易时间，返回交易日期，否则返回False
+        """
         #获取A股最近一个交易日
-        if market == "A":
-            keyWord = "XSHG"
-        elif market == "US":
-            keyWord = "NYSE"
-        elif market == "HK":
-            keyWord = "HKG"
-        stock_calendar = get_calendar(keyWord)
+        stock_calendar = get_calendar(self.market)
+        schedule_time = stock_calendar.schedule(start_date=(datetime.now() - pd.Timedelta(days=range_days)).strftime('%Y%m%d'),
+                                        end_date=datetime.now().strftime('%Y%m%d'))
+        ts_close = schedule_time.loc[schedule_time.index[-1],'market_close']
+        ts_open = schedule_time.loc[schedule_time.index[-1],'market_open']
+        now = datetime.now(ts_close.tz)
 
-        #判断是否为开盘时间
+        #如果是开盘时间
+        if now<ts_close and now>ts_open:
+            return ts_close.to_pydatetime().strftime('%Y%m%d')
+        else:
+            return False
+
+
+    def get_last_trade_date(self, range_days = 10):
+        #获取A股最近一个交易日
+        stock_calendar = get_calendar(self.market)
+        #获取最近range_days天的交易日
         schedule_time = stock_calendar.schedule(start_date=(datetime.now() - pd.Timedelta(days=range_days)).strftime('%Y%m%d'),
                                         end_date=datetime.now().strftime('%Y%m%d'))
         ts = schedule_time.loc[schedule_time.index[-1],'market_close']
         now = datetime.now(ts.tz)
 
         # 如果当前时间大于最后一个交易日收盘时间，则返回最后一个交易日，否则返回倒数第二个交易日
-        if now>ts.to_pydatetime():
-            return ts.to_pydatetime().strftime('%Y%m%d')
-        else:
+        if now<ts.to_pydatetime():
             ts = schedule_time.loc[schedule_time.index[-2],'market_close']
-            return ts.to_pydatetime().strftime('%Y%m%d')
+        
+        ConfigTools.set_config("Running.Settings","LastTradeDate_"+self.market ,ts.to_pydatetime().strftime('%Y%m%d'))
+
+        return ts.to_pydatetime().strftime('%Y%m%d')
 
 
 def file_exist_or_get_data_decorator(decorator_args):
@@ -116,15 +136,8 @@ def file_exist_or_get_data(func,decorator_args=[1],*args,**kwargs):
 if __name__ == "__main__":
     a = Get_Data_Tools()
     # print(file_exist_or_get_data(ak.stock_info_a_code_name))
-    
-    @file_exist_or_get_data_decorator([1])  
-    def stock_info_a_code_name():
-        # 获取所有A股股票代码
-        stock_info = ak.stock_info_a_code_name() 
-        # 创建一个空的DataFrame来存储结果
-        return stock_info
-    print(stock_info_a_code_name())
-    #回去一年的数据
 
+    print(a.get_trade_date())
+    print(a.get_last_trade_date())
     # print(get_stock_zh_a_daily_hist("000001"))
 

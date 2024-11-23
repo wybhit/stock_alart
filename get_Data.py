@@ -11,6 +11,8 @@ from tools import ConfigTools
 class Stock_A_History_Date:
     def __init__(self,days=365):
         self.days = days
+        self.Data_Tools = Get_Data_Tools()
+
 
     @file_exist_or_get_data_decorator([1])
     def get_stock_zh_a_daily_hist(self,code):
@@ -52,10 +54,22 @@ class Stock_A_History_Date:
         
         return result_df
 
+class Stock_A_Real_Time_Data:
+    def __init__(self):
+        self.Data_Tools = Get_Data_Tools()
+    
+    #获取全部A股实时股价数据
+    def get_stock_zh_a_realtime(self):
+        #通过akshare获取实时行情数据
+        stock_zh_a_spot_em_df = ak.stock_zh_a_spot_em()
+        
+
+        return stock_zh_a_spot_em_df
+
 
 if __name__ == "__main__":
-    stock_a_history_date = Stock_A_History_Date()
-    print(stock_a_history_date.get_history_max_price())
+    stock_a_history_date = Stock_A_Real_Time_Data()
+    print(stock_a_history_date.get_stock_zh_a_realtime())
 
 
     
