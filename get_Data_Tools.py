@@ -61,6 +61,7 @@ def file_exist_or_get_data_decorator(decorator_args):
     """
     装饰器，用于查询存储文件是否存在，如果存在，则读取文件，否则获取数据并存储
     decorator_args[0]: 是否为日更新数据
+    decorator_args[1]: 市场
     """
     def decorator(func):
         def wrapper(*args,**kwargs):
@@ -69,8 +70,15 @@ def file_exist_or_get_data_decorator(decorator_args):
                 os.makedirs(file_path)
             # 日更新数据为盘后更新数据
             if decorator_args[0]:
-                #判断是否为收盘后时间
-                trade_end_date = ConfigTools.get_config("Running.Settings","LastTradeDate")
+                #
+                if decorator_args[1] == "A":
+                    market = "XSHG"
+                elif decorator_args[1] == "US":
+                    market = "NYSE"
+                elif decorator_args[1] == "HK":
+                    market = "HKG"
+                trade_end_date = ConfigTools.get_config("Running.Settings","LastTradeDate_"+market)
+
                 # 生成文件名
                 file_name = func.__name__
                 for arg in args:
@@ -94,11 +102,11 @@ def file_exist_or_get_data_decorator(decorator_args):
         return wrapper
     return decorator
     
-def file_exist_or_get_data(func,decorator_args=[1],*args,**kwargs):
+def file_exist_or_get_data(func,decorator_args=[1,"A"],*args,**kwargs):
     """
     用于查询存储文件是否存在，如果存在，则读取文件，否则获取数据并存储
     decorator_args[0]: 是否为日更新数据
-    e.g. file_exist_or_get_data(ak.stock_info_a_code_name,0)
+    decorator_args[1]: 市场
     """
     file_path = "D:\\my_stock_data"
 
@@ -108,7 +116,15 @@ def file_exist_or_get_data(func,decorator_args=[1],*args,**kwargs):
     # 日更新数据为盘后更新数据
     if decorator_args[0]:
         #判断是否为收盘后时间
-        trade_end_date = ConfigTools.get_config("Running.Settings","LastTradeDate")
+        if decorator_args[1] == "A":
+            market = "XSHG"
+        elif decorator_args[1] == "US":
+            market = "NYSE"
+        elif decorator_args[1] == "HK":
+            market = "HKG"
+            
+        trade_end_date = ConfigTools.get_config("Running.Settings","LastTradeDate_"+market)
+
         # 生成文件名
         file_name = func.__name__
         for arg in args:
