@@ -23,35 +23,36 @@ class Stock_A_History_Date:
                                 start_date=start_date,
                                 end_date=end_date,adjust="qfq")
     
+
     @file_exist_or_get_data_decorator([1])
     def get_history_max_price(self):
         # 获取所有A股股票代码
         stock_info = file_exist_or_get_data(ak.stock_info_a_code_name,[1])
         # 创建一个空的DataFrame来存储结果
-        result_df = pd.DataFrame(columns=['股票代码', '股票名称', '250日最高价'])
+        result_df = pd.DataFrame(columns=['股票代码', '股票名称', '最高价','日期'])
         
         # 遍历每只股票
         for index, row in stock_info.iterrows():
             try:
                 code = row['code']
-                name = row['name']
-                
+                name = row['name']                
                 # 获取历史数据
-                hist_data = self.get_stock_zh_a_daily_hist(code)
-                
+                hist_data = self.get_stock_zh_a_daily_hist(code)               
                 # 计算最高价
                 max_price = hist_data['最高'].max()
-                
-                # 添加到结果DataFrame
-                result_df = pd.concat([result_df, pd.DataFrame({'股票代码': [code], '股票名称': [name], '250日最高价': [max_price]})], ignore_index=True)
+                max_date = hist_data['日期'][hist_data['最高'] == max_price].iloc[-1]
+                #是倒数第几行
+                max_date_index = hist_data.index[hist_data['日期'] == max_date].tolist()[-1]
 
+                # 添加到结果DataFrame
+                result_df = pd.concat([result_df, pd.DataFrame({'股票代码': [code], '股票名称': [name], 
+                                                                '最高价': [max_price],'日期': [max_date],
+                                                                '距今交易日': [max_date_index]})], ignore_index=True)
                 
-                print(f"已处理: {code} {name}")
-                
+                print(f"已处理: {code} {name}")          
             except Exception as e:
                 print(f"处理{code}时出错: {str(e)}")
-                continue
-        
+                continue        
         return result_df
 
 class Stock_A_Real_Time_Data:
@@ -68,8 +69,8 @@ class Stock_A_Real_Time_Data:
 
 
 if __name__ == "__main__":
-    stock_a_history_date = Stock_A_Real_Time_Data()
-    print(stock_a_history_date.get_stock_zh_a_realtime())
+    a = Stock_A_History_Date()
+    print(a.get_history_max_price())
 
 
     
