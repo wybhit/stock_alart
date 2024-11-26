@@ -1,6 +1,7 @@
 import configparser
 from datetime import datetime
 
+
 class ConfigTools:
     config = configparser.ConfigParser()
     config.read("settings.ini")
@@ -21,4 +22,6 @@ if __name__ == "__main__":
    
     ConfigTools.set_config("Running.Settings","LastTradeDate22","20241122")
     print(ConfigTools.get_config("Running.Settings","LastTradeDate"))
+
+
 
