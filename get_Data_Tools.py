@@ -46,12 +46,31 @@ class DataPathManager:
             except Exception as e:
                 logger.warning(f"删除文件失败 {file}: {e}")
 
-def create_filename(func_name: str, args: tuple, kwargs: dict, trade_date: str) -> str:
-    """生成统一的文件名"""
+def create_filename(func_name: str, args: tuple, kwargs: dict, trade_date: str = "") -> str:
+    """生成统一的文件名
+    
+    Args:
+        func_name: 函数名
+        args: 位置参数
+        kwargs: 关键字参数
+        trade_date: 交易日期，可选
+        
+    Returns:
+        str: 生成的文件名
+    """
     parts = [func_name]
-    parts.extend(str(arg) for arg in args if not str(arg).startswith("<__main__."))
+    # 添加非类实例的参数到文件名
+    parts.extend(str(arg) for arg in args if not str(arg).startswith("<"))
+    # 添加关键字参数
     parts.extend(f"{k}_{v}" for k, v in kwargs.items())
-    return f"{'_'.join(parts)}_{trade_date}.csv"
+    
+    # 组合基础文件名
+    base_name = "_".join(parts)
+    
+    # 如果提供了交易日期，则添加到文件名中
+    if trade_date:
+        return f"{base_name}_{trade_date}.csv"
+    return base_name
 
 def file_exist_or_get_data_decorator(is_daily_update: bool = True, market: str = "A"):
     """改进的文件缓存装饰器"""
@@ -72,6 +91,7 @@ def file_exist_or_get_data_decorator(is_daily_update: bool = True, market: str =
                 if not trade_date:
                     raise ValueError("未能获取交易日期")
 
+                # 生成文件名
                 filename = create_filename(func.__name__, args, kwargs, trade_date)
                 file_path = DataPathManager.get_file_path(filename)
 
@@ -85,8 +105,11 @@ def file_exist_or_get_data_decorator(is_daily_update: bool = True, market: str =
                     raise ValueError("获取到的数据为空")
 
                 # 清理旧文件并保存新数据
-                pattern = f"{func.__name__}*.csv"
+                base_filename = create_filename(func.__name__, args, kwargs, "")  # 不包含日期的基础文件名
+                pattern = f"{base_filename}*.csv"
                 DataPathManager.clean_old_files(pattern)
+                
+                # 保存新数据
                 df.to_csv(file_path, index=False)
                 logger.info(f"数据已保存: {filename}")
 
