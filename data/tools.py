@@ -1,12 +1,11 @@
-from pandas_market_calendars import get_calendar
-from datetime import datetime, timezone
+from datetime import timezone
 from pathlib import Path
 from typing import Any, Optional, Dict, Union, List, Callable
 import pandas as pd
 import logging
 from functools import wraps
-import os
-from utils import ConfigTools
+# from config.config_manager import ConfigTools
+from config.config_manager import ConfigTools
 
 # 配置日志
 logging.basicConfig(
@@ -72,6 +71,7 @@ def create_filename(func_name: str, args: tuple, kwargs: dict, trade_date: str =
         return f"{base_name}_{trade_date}.csv"
     return base_name
 
+
 def file_exist_or_get_data_decorator(is_daily_update: bool = True, market: str = "A"):
     """改进的文件缓存装饰器"""
     def decorator(func: Callable) -> Callable:
@@ -108,7 +108,7 @@ def file_exist_or_get_data_decorator(is_daily_update: bool = True, market: str =
                 base_filename = create_filename(func.__name__, args, kwargs, "")  # 不包含日期的基础文件名
                 pattern = f"{base_filename}*.csv"
                 DataPathManager.clean_old_files(pattern)
-                
+
                 # 保存新数据
                 df.to_csv(file_path, index=False)
                 logger.info(f"数据已保存: {filename}")
@@ -122,86 +122,16 @@ def file_exist_or_get_data_decorator(is_daily_update: bool = True, market: str =
         return wrapper
     return decorator
 
+
 def file_exist_or_get_data(func: Callable, decorator_args: List = [1, "A"], *args: Any, **kwargs: Any) -> pd.DataFrame:
     """改进的文件缓存函数"""
     is_daily_update, market = decorator_args
     decorated_func = file_exist_or_get_data_decorator(is_daily_update, market)(func)
     return decorated_func(*args, **kwargs)
 
-class Get_Data_Tools:
-    """数据工具类"""
-    def __init__(self, market: str = "A"):
-        if market not in MARKET_CODES:
-            raise ValueError(f"不支持的市场类型: {market}")
-            
-        self.market = MARKET_CODES[market]
-        self.config = ConfigTools()
-        self.last_trade_date = self.get_last_trade_date()
-
-    def get_trade_date(self, range_days: int = 1) -> Optional[str]:
-        """获取交易日期"""
-        try:
-            calendar = get_calendar(self.market)
-            schedule = calendar.schedule(
-                start_date=(datetime.now() - pd.Timedelta(days=range_days)).strftime('%Y%m%d'),
-                end_date=datetime.now().strftime('%Y%m%d')
-            )
-
-            if schedule.empty:
-                return None
-
-            latest_date = schedule.index[-1]
-            market_close = schedule.loc[latest_date, 'market_close']
-            market_open = schedule.loc[latest_date, 'market_open']
-            
-            now = datetime.now(market_close.tz)
-            
-            if market_open < now < market_close:
-                return market_close.strftime('%Y%m%d')
-            return None
-
-        except Exception as e:
-            logger.error(f"获取交易日期失败: {str(e)}")
-            return None
-
-    def get_last_trade_date(self, range_days: int = 10) -> str:
-        """获取最近的交易日期"""
-        try:
-            calendar = get_calendar(self.market)
-            schedule = calendar.schedule(
-                start_date=(datetime.now() - pd.Timedelta(days=range_days)).strftime('%Y%m%d'),
-                end_date=datetime.now().strftime('%Y%m%d')
-            )
-
-            if schedule.empty:
-                raise ValueError("未能获取交易日历")
-
-            latest_close = schedule.loc[schedule.index[-1], 'market_close']
-            now = datetime.now(latest_close.tz)
-
-            # 确定最后交易日
-            if now < latest_close:
-                trade_date = schedule.loc[schedule.index[-2], 'market_close']
-            else:
-                trade_date = latest_close
-
-            # 更新配置
-            formatted_date = trade_date.strftime('%Y%m%d')
-            self.config.set_config(
-                "Running.Settings",
-                f"LastTradeDate_{self.market}",
-                formatted_date
-            )
-
-            return formatted_date
-
-        except Exception as e:
-            logger.error(f"获取最后交易日期失败: {str(e)}")
-            raise
-
 if __name__ == "__main__":
     try:
-        data_tools = Get_Data_Tools()
+        data_tools = TradeDate()
         print(f"当前交易日: {data_tools.get_trade_date()}")
         print(f"最后交易日: {data_tools.get_last_trade_date()}")
     except Exception as e:

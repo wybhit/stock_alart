@@ -1,23 +1,91 @@
-from datetime import datetime
-import akshare as ak
-import pandas as pd
-from typing import Optional, Dict, List
 from pathlib import Path
-import logging
-from get_Data_Tools import file_exist_or_get_data, file_exist_or_get_data_decorator
-from get_Data_Tools import Get_Data_Tools
+from typing import Dict, List, Optional
 
-# 配置日志
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
+import akshare as ak
+from config.config_manager import ConfigTools
+from data.tools import MARKET_CODES, file_exist_or_get_data, file_exist_or_get_data_decorator, logger
+
+
+import pandas as pd
+from pandas_market_calendars import get_calendar
+
+
+from datetime import datetime
+
+
+class TradeDateTools:
+    """数据工具类"""
+    def __init__(self, market: str = "A"):
+        if market not in MARKET_CODES:
+            raise ValueError(f"不支持的市场类型: {market}")
+
+        self.market = MARKET_CODES[market]
+        self.config = ConfigTools()
+        self.last_trade_date = self.get_last_trade_date()
+
+    def get_trade_date(self, range_days: int = 1) -> Optional[str]:
+        """获取交易日期"""
+        try:
+            calendar = get_calendar(self.market)
+            schedule = calendar.schedule(
+                start_date=(datetime.now() - pd.Timedelta(days=range_days)).strftime('%Y%m%d'),
+                end_date=datetime.now().strftime('%Y%m%d')
+            )
+
+            if schedule.empty:
+                return None
+
+            latest_date = schedule.index[-1]
+            market_close = schedule.loc[latest_date, 'market_close']
+            market_open = schedule.loc[latest_date, 'market_open']
+
+            now = datetime.now(market_close.tz)
+
+            if market_open < now < market_close:
+                return market_close.strftime('%Y%m%d')
+            return None
+
+        except Exception as e:
+            logger.error(f"获取交易日期失败: {str(e)}")
+            return None
+
+    def get_last_trade_date(self, range_days: int = 10) -> str:
+        """获取最近的交易日期"""
+        try:
+            calendar = get_calendar(self.market)
+            end_date = datetime.now().strftime('%Y%m%d')
+            start_date = (datetime.now() - pd.Timedelta(days=range_days)).strftime('%Y%m%d')
+            
+            schedule = calendar.schedule(start_date=start_date, end_date=end_date)
+            
+            if schedule.empty:
+                raise ValueError("未能获取交易日历")
+            
+            # 获取最后一个交易日的收盘时间
+            latest_date = schedule.index[-1]
+            latest_close = schedule.loc[latest_date, 'market_close']
+            now = datetime.now(latest_close.tz)
+            
+            # 如果当前时间早于最后一个交易日的收盘时间，则取前一个交易日
+            if now < latest_close and len(schedule) > 1:
+                trade_date = schedule.iloc[-2]['market_close']
+            else:
+                trade_date = latest_close
+                
+            formatted_date = trade_date.strftime('%Y%m%d')
+            self.config.set_config("Running.Settings", f"LastTradeDate_{self.market}", formatted_date)
+            
+            return formatted_date
+            
+        except Exception as e:
+            logger.error(f"获取最后交易日期失败: {str(e)}")
+            raise
+
 
 class StockDataProcessor:
     """股票数据处理基类"""
     def __init__(self, market: str = "A"):
-        self.data_tools = Get_Data_Tools(market)
+        self.data_tools = TradeDateTools(market)
         self.last_trade_date = self.data_tools.last_trade_date
 
     def safe_convert_numeric(self, df: pd.DataFrame, columns: List[str]) -> pd.DataFrame:
@@ -26,6 +94,7 @@ class StockDataProcessor:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce')
         return df
+
 
 class StockAHistoryData(StockDataProcessor):
     """A股历史数据处理类"""
@@ -53,10 +122,16 @@ class StockAHistoryData(StockDataProcessor):
             raise
 
     def process_single_stock(self, code: str, name: str) -> Optional[Dict]:
-        """处理单个股票的数据"""
         try:
             hist_data = self.get_stock_daily_history(code)
-            if hist_data.empty:
+            if hist_data is None or hist_data.empty:
+                logger.warning(f"股票 {code} {name} 未获取到历史数据")
+                return None
+
+            # 确保列名存在
+            required_columns = ['日期', '最高']
+            if not all(col in hist_data.columns for col in required_columns):
+                logger.warning(f"股票 {code} {name} 数据格式不正确")
                 return None
 
             hist_data = self.safe_convert_numeric(hist_data, ['最高'])
@@ -84,14 +159,14 @@ class StockAHistoryData(StockDataProcessor):
     def get_history_max_price(self) -> pd.DataFrame:
         """获取所有股票的历史最高价格数据"""
         try:
-            stock_info = file_exist_or_get_data(ak.stock_info_a_code_name, [1, "A"])
-            if stock_info.empty:
+            stock_list = file_exist_or_get_data(ak.stock_list_a_code_name, [1, "A"])
+            if stock_list.empty:
                 raise ValueError("获取股票列表失败")
 
             results = []
-            total_stocks = len(stock_info)
+            total_stocks = len(stock_list)
 
-            for idx, row in stock_info.iterrows():
+            for idx, row in stock_list.iterrows():
                 logger.info(f"处理进度: {idx+1}/{total_stocks} - {row['code']} {row['name']}")
                 result = self.process_single_stock(str(row['code']), str(row['name']))
                 if result:
@@ -104,6 +179,7 @@ class StockAHistoryData(StockDataProcessor):
         except Exception as e:
             logger.error(f"获取历史最高价格数据失败: {str(e)}")
             raise
+
 
 class StockARealTimeData(StockDataProcessor):
     """A股实时数据处理类"""
@@ -118,6 +194,7 @@ class StockARealTimeData(StockDataProcessor):
             logger.error(f"获取实时行情数据失败: {str(e)}")
             raise
 
+
 class StockDataAnalyzer:
     """股票数据分析类"""
     def __init__(self, output_dir: str = "output"):
@@ -125,34 +202,50 @@ class StockDataAnalyzer:
         self.output_dir.mkdir(exist_ok=True)
 
     def process_and_analyze(self) -> pd.DataFrame:
-        """处理和分析股票数据"""
         try:
             # 获取历史数据
             history_data = StockAHistoryData()
             max_price_df = history_data.get_history_max_price()
+            
+            if max_price_df.empty:
+                raise ValueError("未能获取历史价格数据")
 
             # 获取实时数据
             realtime_data = StockARealTimeData()
             realtime_df = realtime_data.get_realtime_data()
+            
+            if realtime_df.empty:
+                raise ValueError("未能获取实时数据")
 
+            # 合并数据前确保列名一致
+            realtime_df = realtime_df.rename(columns={'代码': '股票代码'})
+            
             # 合并数据
             result_df = pd.merge(
                 max_price_df,
                 realtime_df,
-                left_on='股票代码',
-                right_on='代码',
+                on='股票代码',
                 how='inner'
             )
 
-            # 转换数据类型
+            # 转换数据类型并处理异常值
             numeric_columns = ['历史最高', '最高', '流通市值']
             result_df = StockDataProcessor().safe_convert_numeric(result_df, numeric_columns)
+            
+            # 移除异常值
+            result_df = result_df[result_df['历史最高'] > 0]
+            result_df = result_df[result_df['最高'] > 0]
+            result_df = result_df[result_df['流通市值'] > 0]
 
             # 筛选数据
             filtered_df = result_df[
                 (result_df['历史最高'] < result_df['最高']) &
                 (result_df['流通市值'] > 1e10)
             ].copy()
+
+            if filtered_df.empty:
+                logger.warning("筛选后没有符合条件的数据")
+                return pd.DataFrame()
 
             # 排序
             filtered_df = filtered_df.sort_values('流通市值', ascending=False).reset_index(drop=True)
@@ -172,25 +265,3 @@ class StockDataAnalyzer:
         except Exception as e:
             logger.error(f"保存结果失败: {str(e)}")
             raise
-
-def main():
-    """主函数"""
-    try:
-        analyzer = StockDataAnalyzer()
-        result_df = analyzer.process_and_analyze()
-        analyzer.save_results(result_df)
-        
-        logger.info("\n筛选结果概览:")
-        logger.info(f"\n{result_df}")
-        
-    except Exception as e:
-        logger.error(f"程序执行出错: {str(e)}")
-        raise
-
-if __name__ == "__main__":
-    main()
-
-
-
-    
-

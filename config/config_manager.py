@@ -3,9 +3,10 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
 
+DEFAULT_CONFIG_PATH = Path(__file__).parent / "settings.ini"
 
 class ConfigTools:
-    def __init__(self, config_file: str | Path = "settings.ini") -> None:
+    def __init__(self, config_file: str | Path = DEFAULT_CONFIG_PATH ) -> None:
         self._config = configparser.ConfigParser()
         self._config_file = Path(config_file)
         self._load_confg()
