@@ -74,13 +74,17 @@ def create_filename(func_name: str, args: tuple, kwargs: dict, trade_date: str =
 
 def file_exist_or_get_data_decorator(is_daily_update: bool = True, market: str = "A"):
     """改进的文件缓存装饰器"""
-    def decorator(func: Callable) -> Callable:
+    def decorator(func: Callable[..., Union[pd.DataFrame, Any]]) -> Callable:
         @wraps(func)
-        def wrapper(*args: Any, **kwargs: Any) -> pd.DataFrame:
+        def wrapper(*args: Any, **kwargs: Any) -> Union[pd.DataFrame, Any]:
             if not is_daily_update:
                 return func(*args, **kwargs)
 
             try:
+                # 添加配置检查
+                if not hasattr(ConfigTools, 'get_config'):
+                    raise ImportError("ConfigTools 类未正确导入或缺少 get_config 方法")
+                    
                 DataPathManager.ensure_base_path()
                 market_code = MARKET_CODES.get(market)
                 if not market_code:
@@ -131,8 +135,17 @@ def file_exist_or_get_data(func: Callable, decorator_args: List = [1, "A"], *arg
 
 if __name__ == "__main__":
     try:
-        data_tools = TradeDate()
-        print(f"当前交易日: {data_tools.get_trade_date()}")
-        print(f"最后交易日: {data_tools.get_last_trade_date()}")
+        # 删除或替换这段代码，因为 TradeDate 类未定义
+        # data_tools = TradeDate()
+        # print(f"当前交易日: {data_tools.get_trade_date()}")
+        # print(f"最后交易日: {data_tools.get_last_trade_date()}")
+        
+        # 可以改为测试现有功能
+        @file_exist_or_get_data_decorator()
+        def test_func():
+            return pd.DataFrame({'test': [1, 2, 3]})
+            
+        result = test_func()
+        print("测试完成")
     except Exception as e:
         logger.error(f"程序执行失败: {str(e)}")

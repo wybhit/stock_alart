@@ -159,7 +159,7 @@ class StockAHistoryData(StockDataProcessor):
     def get_history_max_price(self) -> pd.DataFrame:
         """获取所有股票的历史最高价格数据"""
         try:
-            stock_list = file_exist_or_get_data(ak.stock_list_a_code_name, [1, "A"])
+            stock_list = file_exist_or_get_data(ak.stock_info_a_code_name, [1, "A"])
             if stock_list.empty:
                 raise ValueError("获取股票列表失败")
 
