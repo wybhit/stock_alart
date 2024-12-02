@@ -11,6 +11,7 @@ from pandas_market_calendars import get_calendar
 
 
 from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
 class TradeDateTools:
@@ -165,17 +166,69 @@ class StockAHistoryData(StockDataProcessor):
 
             results = []
             total_stocks = len(stock_list)
+            processed_count = 0
+            error_count = 0
+            
+            # 计算最佳线程数
+            max_workers = min(20, (total_stocks + 49) // 50)  # 每50个股票分配一个线程，最多20个线程
+            
+            # 使用线程池处理数据
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                # 分批提交任务，避免内存占用过大
+                batch_size = 100
+                for i in range(0, total_stocks, batch_size):
+                    batch_stocks = stock_list.iloc[i:i+batch_size]
+                    
+                    # 创建批次任务
+                    future_to_stock = {
+                        executor.submit(
+                            self.process_single_stock, 
+                            str(row['code']), 
+                            str(row['name'])
+                        ): row 
+                        for _, row in batch_stocks.iterrows()
+                    }
 
-            for idx, row in stock_list.iterrows():
-                logger.info(f"处理进度: {idx+1}/{total_stocks} - {row['code']} {row['name']}")
-                result = self.process_single_stock(str(row['code']), str(row['name']))
-                if result:
-                    results.append(result)
+                    # 处理完成的任务
+                    for future in as_completed(future_to_stock):
+                        processed_count += 1
+                        stock = future_to_stock[future]
+                        
+                        try:
+                            result = future.result()
+                            if result:
+                                results.append(result)
+                            
+                            # 每处理100个股票显示一次进度
+                            if processed_count % 100 == 0:
+                                success_rate = (processed_count - error_count) / processed_count * 100
+                                logger.info(
+                                    f"处理进度: {processed_count}/{total_stocks} "
+                                    f"({processed_count/total_stocks*100:.1f}%) - "
+                                    f"成功率: {success_rate:.1f}%"
+                                )
+                                
+                        except Exception as e:
+                            error_count += 1
+                            logger.error(f"处理股票 {stock['code']} {stock['name']} 失败: {str(e)}")
 
+            # 最终处理结果统计
             if not results:
                 raise ValueError("未能获取任何有效数据")
+            
+            success_rate = (processed_count - error_count) / processed_count * 100
+            logger.info(
+                f"处理完成 - 总数: {total_stocks}, 成功: {len(results)}, "
+                f"失败: {error_count}, 成功率: {success_rate:.1f}%"
+            )
 
-            return pd.DataFrame(results)
+            # 转换为DataFrame并优化内存使用
+            df = pd.DataFrame(results)
+            for col in df.select_dtypes(include=['float64']).columns:
+                df[col] = df[col].astype('float32')
+            
+            return df
+            
         except Exception as e:
             logger.error(f"获取历史最高价格数据失败: {str(e)}")
             raise
