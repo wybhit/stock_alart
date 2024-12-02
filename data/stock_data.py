@@ -292,7 +292,7 @@ class StockDataAnalyzer:
 
             # 筛选数据
             filtered_df = result_df[
-                (result_df['历史最高'] < result_df['最高']) &
+                (result_df['历史最高'] <= result_df['最高']) &
                 (result_df['流通市值'] > 1e10)
             ].copy()
 

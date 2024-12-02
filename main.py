@@ -1,10 +1,8 @@
-from data.stock_data import StockDataAnalyzer
+from utils.stock_monitor import StockMonitor
 
 def main():
-    analyzer = StockDataAnalyzer()
-    result_df = analyzer.process_and_analyze()
-    print(result_df)
-    analyzer.save_results(result_df)
+    monitor = StockMonitor(check_interval=60)  # 每60秒检查一次
+    monitor.start()
 
 if __name__ == "__main__":
     main()

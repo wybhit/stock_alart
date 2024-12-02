@@ -1,0 +1,29 @@
+[DEFAULT]
+serveraliveinterval = 45
+compression = yes
+compressionlevel = 9
+forwardx11 = yes
+
+[Running.Settings]
+lasttradedate_xshg = 20241202
+lasttradedate22 = 20241122
+lasttradedate = 20241127
+
+[Email.Account1]
+smtp_server = smtp.example.com
+smtp_port = 587
+sender = your_email@example.com
+password = your_password
+receiver = receiver@example.com
+
+[Email.Account2]
+smtp_server = smtp.example.com
+smtp_port = 587
+sender = another_email@example.com
+password = another_password
+receiver = another_receiver@example.com
+
+[topsecret.server.example]
+port = 50022
+forwardx11 = no
+
