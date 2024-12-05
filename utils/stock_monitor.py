@@ -113,8 +113,8 @@ class StockMonitor:
         afternoon_start = dt_time(13, 0)
         afternoon_end = dt_time(15, 0)
         
-        return (morning_start <= now <= morning_end) or (afternoon_start <= now <= afternoon_end)
-
+        # return (morning_start <= now <= morning_end) or (afternoon_start <= now <= afternoon_end)
+        return True
     def clean_output_files(self) -> None:
         """清理输出文件"""
         try:
