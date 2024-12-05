@@ -14,13 +14,17 @@ class StockReportSender:
             password=password
         )
         
-    def send_stock_report(self, df: pd.DataFrame, receiver: Union[str, List[str]]) -> None:
+    def send_stock_report(self, df: pd.DataFrame, receiver: str, subject: str = None) -> None:
         """发送股票报告
         
         Args:
             df: 股票数据
-            receiver: 可以是单个邮箱地址或邮箱地址列表
+            receiver: 接收者邮箱
+            subject: 自定义邮件标题
         """
+        if subject is None:
+            subject = "股票监控提醒"
+        
         try:
             if df.empty:
                 logger.warning("没有数据需要发送")
@@ -50,7 +54,7 @@ class StockReportSender:
             
             # 发送给每个收件人
             for receiver_email in receivers:
-                if self.email_sender.send_stock_report(receiver_email.strip(), display_df):
+                if self.email_sender.send_stock_report(receiver_email.strip(), display_df, subject):
                     logger.info(f"邮件发送成功: {receiver_email}")
             
         except Exception as e:

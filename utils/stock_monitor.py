@@ -9,6 +9,19 @@ from utils.email_sender import StockReportSender
 from config.config_manager import ConfigTools
 from data.tools import logger
 
+# 添加常量配置在文件开头
+OUTPUT_DIR = Path("output")
+OUTPUT_FILES = {
+    'previous_stocks': OUTPUT_DIR / "previous_stocks.csv",
+    'new_stocks': OUTPUT_DIR / "new_stocks.csv",
+    'result_df': OUTPUT_DIR / "result_df.csv"
+}
+
+MARKET_HOURS = {
+    'morning': (dt_time(9, 30), dt_time(11, 30)),
+    'afternoon': (dt_time(13, 0), dt_time(15, 0))
+}
+
 class StockMonitor:
     """股票监控类"""
     def __init__(self, check_interval: int = 60):
@@ -22,17 +35,23 @@ class StockMonitor:
         self.analyzer = StockDataAnalyzer()
         self.config = ConfigTools()
         self.previous_stocks: Set[str] = set()
-        self.previous_file = Path("output/previous_stocks.csv")
+        self.previous_file = OUTPUT_FILES['previous_stocks']
         self.is_running = False
+        self.email_notifier = EmailNotifier(self.config)
+
+    def _ensure_output_dir(self) -> None:
+        """确保输出目录存在"""
+        OUTPUT_DIR.mkdir(exist_ok=True)
 
     def load_previous_stocks(self) -> None:
         """加载之前的股票记录"""
+        if not self.previous_file.exists():
+            self.previous_stocks = set()
+            return
+
         try:
-            if self.previous_file.exists():
-                df = pd.read_csv(self.previous_file)
-                self.previous_stocks = set(df['股票代码'].tolist())
-            else:
-                self.previous_stocks = set()
+            df = pd.read_csv(self.previous_file)
+            self.previous_stocks = set(df['股票代码'].tolist())
         except Exception as e:
             logger.error(f"加载之前的股票记录失败: {str(e)}")
             self.previous_stocks = set()
@@ -45,62 +64,28 @@ class StockMonitor:
         except Exception as e:
             logger.error(f"保存当前股票记录失败: {str(e)}")
 
-    def send_email_alerts(self, df: pd.DataFrame) -> None:
-        """发送邮件提醒"""
-        try:
-            email_sections = [
-                section for section in self.config.get_sections() 
-                if section.startswith('Email.')
-            ]
-            
-            for section in email_sections:
-                try:
-                    report_sender = StockReportSender(
-                        smtp_server=self.config.get_config(section, "smtp_server"),
-                        smtp_port=int(self.config.get_config(section, "smtp_port")),
-                        sender=self.config.get_config(section, "sender"),
-                        password=self.config.get_config(section, "password")
-                    )
-                    report_sender.send_stock_report(
-                        df=df,
-                        receiver=self.config.get_config(section, "receiver")
-                    )
-                    logger.info(f"使用 {section} 发送邮件成功")
-                except Exception as e:
-                    logger.error(f"使用 {section} 发送邮件失败: {str(e)}")
-        except Exception as e:
-            logger.error(f"发送邮件提醒失败: {str(e)}")
-
     def check_stocks(self) -> None:
         """检查股票状态"""
         try:
             result_df = self.analyzer.process_and_analyze()
-            
-            if not result_df.empty:
-                # 获取当前符合条件的股票代码集合
-                current_stocks = set(result_df['股票代码'].tolist())
-                
-                # 找出新增的股票
-                new_stocks = current_stocks - self.previous_stocks
-                
-                if new_stocks:
-                    # 筛选出新增股票的完整数据
-                    new_stocks_df = result_df[result_df['股票代码'].isin(new_stocks)].copy()
-                    logger.info(f"发现 {len(new_stocks)} 只新增股票")
-                    
-                    # 保存新增股票结果
-                    self.analyzer.save_results(new_stocks_df, "new_stocks.csv")
-                    
-                    # 发送邮件
-                    self.send_email_alerts(new_stocks_df)
-                else:
-                    logger.info("没有新增股票")
-                
-                # 更新股票记录
-                self.previous_stocks = current_stocks
-                self.save_current_stocks(current_stocks)
-            else:
+            if result_df.empty:
                 logger.info("没有符合条件的股票")
+                return
+
+            current_stocks = set(result_df['股票代码'].tolist())
+            new_stocks = current_stocks - self.previous_stocks
+            
+            if not new_stocks:
+                logger.info("没有新增股票")
+                return
+
+            new_stocks_df = result_df[result_df['股票代码'].isin(new_stocks)].copy()
+            logger.info(f"发现 {len(new_stocks)} 只新增股票")
+            
+            self.analyzer.save_results(new_stocks_df, "new_stocks.csv")
+            self.email_notifier.send_alerts(new_stocks_df)
+            self.previous_stocks = current_stocks
+            self.save_current_stocks(current_stocks)
                 
         except Exception as e:
             logger.error(f"检查股票状态失败: {str(e)}")
@@ -108,35 +93,25 @@ class StockMonitor:
     def is_market_time(self) -> bool:
         """判断是否在交易时间内"""
         now = datetime.now().time()
-        morning_start = dt_time(9, 30)
-        morning_end = dt_time(11, 30)
-        afternoon_start = dt_time(13, 0)
-        afternoon_end = dt_time(15, 0)
         
-        # return (morning_start <= now <= morning_end) or (afternoon_start <= now <= afternoon_end)
-        return True
+        for period_start, period_end in MARKET_HOURS.values():
+            if period_start <= now <= period_end:
+                return True
+        return False
 
     def clean_output_files(self) -> None:
         """清理输出文件"""
         try:
-            output_dir = Path("output")
-            if output_dir.exists():
-                # 清理特定的文件
-                files_to_clean = [
-                    "previous_stocks.csv",
-                    "new_stocks.csv",
-                    "result_df.csv"
-                ]
-                for file in files_to_clean:
-                    file_path = output_dir / file
-                    if file_path.exists():
-                        file_path.unlink()
-                        logger.info(f"已删除文件: {file}")
+            if not OUTPUT_DIR.exists():
+                self._ensure_output_dir()
+                return
+
+            for file_path in OUTPUT_FILES.values():
+                if file_path.exists():
+                    file_path.unlink()
+                    logger.info(f"已删除文件: {file_path.name}")
             
-            # 确保输出目录存在
-            output_dir.mkdir(exist_ok=True)
             logger.info("输出目录已清理")
-            
         except Exception as e:
             logger.error(f"清理输出文件失败: {str(e)}")
 
@@ -151,6 +126,10 @@ class StockMonitor:
         # 初始化
         self.load_previous_stocks()
         
+        # 测试  
+        result_df = self.analyzer.process_and_analyze()
+        print(result_df)
+
         while self.is_running:
             try:
                 if self.is_market_time():
@@ -171,3 +150,54 @@ class StockMonitor:
         """停止监控"""
         self.is_running = False
         logger.info("监控程序已停止")
+
+class EmailNotifier:
+    """邮件通知类"""
+    def __init__(self, config: ConfigTools):
+        self.config = config
+
+    def _generate_email_subject(self, df: pd.DataFrame) -> str:
+        """生成邮件标题"""
+        try:
+            # 获取股票名称列表
+            stock_names = df['股票名称'].tolist()
+            # 如果股票数量大于3个，只显示前3个并加省略号
+            if len(stock_names) > 3:
+                title_stocks = f"{', '.join(stock_names[:3])}等{len(stock_names)}只股票"
+            else:
+                title_stocks = f"{', '.join(stock_names)}"
+            
+            return f"股票提醒: {title_stocks} 符合条件"
+        except Exception as e:
+            logger.error(f"生成邮件标题失败: {str(e)}")
+            return "股票监控提醒"
+
+    def send_alerts(self, df: pd.DataFrame) -> None:
+        """发送邮件提醒"""
+        try:
+            email_sections = [
+                section for section in self.config.get_sections() 
+                if section.startswith('Email.')
+            ]
+            
+            # 生成邮件标题
+            email_subject = self._generate_email_subject(df)
+            
+            for section in email_sections:
+                try:
+                    report_sender = StockReportSender(
+                        smtp_server=self.config.get_config(section, "smtp_server"),
+                        smtp_port=int(self.config.get_config(section, "smtp_port")),
+                        sender=self.config.get_config(section, "sender"),
+                        password=self.config.get_config(section, "password")
+                    )
+                    report_sender.send_stock_report(
+                        df=df,
+                        receiver=self.config.get_config(section, "receiver"),
+                        subject=email_subject  # 添加自定义标题
+                    )
+                    logger.info(f"使用 {section} 发送邮件成功")
+                except Exception as e:
+                    logger.error(f"使用 {section} 发送邮件失败: {str(e)}")
+        except Exception as e:
+            logger.error(f"发送邮件提醒失败: {str(e)}")
