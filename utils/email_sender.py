@@ -57,6 +57,10 @@ class StockReportSender:
                 if self.email_sender.send_stock_report(receiver_email.strip(), display_df, subject):
                     logger.info(f"邮件发送成功: {receiver_email}")
             
+        except ValueError as ve:
+            logger.error(f"数据处理错误: {str(ve)}")
+        except smtplib.SMTPException as smtp_e:
+            logger.error(f"SMTP错误: {str(smtp_e)}")
         except Exception as e:
             logger.error(f"发送邮件报告失败: {str(e)}")
 
@@ -82,6 +86,7 @@ class EmailSender:
             msg['To'] = receiver
             msg['Subject'] = subject or '股票新高提醒'
 
+            # 生成HTML内容
             html_content = f"""
             <html>
                 <head>
@@ -110,7 +115,7 @@ class EmailSender:
                 </head>
                 <body>
                     <h3>今日创新高的股票：</h3>
-                    {df.to_html(index=False)}
+                    {self._generate_html_table(df)}
                     <p style="color: gray; font-size: 12px;">
                         注：<br>
                         1. 流通市值单位为亿元<br>
@@ -130,3 +135,18 @@ class EmailSender:
         except Exception as e:
             logger.error(f"发送邮件失败: {str(e)}")
             return False
+
+    def _generate_html_table(self, df: pd.DataFrame) -> str:
+        """生成带有超链接的HTML表格"""
+        df = df.copy()
+        df['股票名称'] = df.apply(lambda row: f'<a href="https://xueqiu.com/S/{self._get_stock_prefix(row["股票代码"])}{row["股票代码"]}">{row["股票名称"]}</a>', axis=1)
+        df['股票代码'] = df.apply(lambda row: f'<a href="https://quote.eastmoney.com/{row["股票代码"]}.html" target="_blank">{row["股票代码"]}</a>', axis=1)
+        return df.to_html(index=False, escape=False)
+
+    def _get_stock_prefix(self, stock_code: str) -> str:
+        """根据股票代码返回前缀"""
+        # 假设股票代码以6开头的是上证（SH），其他的是深证（SZ）
+        if stock_code.startswith('6'):
+            return 'SH'
+        else:
+            return 'SZ'
