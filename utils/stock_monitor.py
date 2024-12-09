@@ -84,7 +84,7 @@ class StockMonitor:
             
             self.analyzer.save_results(new_stocks_df, "new_stocks.csv")
             self.email_notifier.send_alerts(new_stocks_df)
-            self.previous_stocks = current_stocks
+            self.previous_stocks = self.previous_stocks | new_stocks
             self.save_current_stocks(current_stocks)
                 
         except Exception as e:
