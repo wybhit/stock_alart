@@ -127,11 +127,17 @@ class EmailSender:
             
             msg.attach(MIMEText(html_content, 'html', 'utf-8'))
 
+            logger.info("尝试连接到SMTP服务器")
             with smtplib.SMTP_SSL(self.smtp_server, self.smtp_port) as server:
+                logger.info("登录SMTP服务器")
                 server.login(self.sender, self.password)
+                logger.info("发送邮件")
                 server.send_message(msg)
+                logger.info("邮件发送成功")
                 return True
                 
+        except smtplib.SMTPException as smtp_e:
+            logger.error(f"SMTP错误: {str(smtp_e)}")
         except Exception as e:
             logger.error(f"发送邮件失败: {str(e)}")
             return False
