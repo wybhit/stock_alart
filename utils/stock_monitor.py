@@ -31,6 +31,7 @@ class StockMonitor:
         Args:
             check_interval: 检查间隔（秒）
         """
+        # 初始化属性
         self.check_interval = check_interval
         self.analyzer = StockDataAnalyzer()
         self.config = ConfigTools()
