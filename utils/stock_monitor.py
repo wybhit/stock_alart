@@ -24,7 +24,7 @@ MARKET_HOURS = {
 
 class StockMonitor:
     """股票监控类"""
-    def __init__(self, check_interval: int = 60):
+    def __init__(self, check_interval: int = 15):
         """
         初始化监控器
         
