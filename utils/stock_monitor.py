@@ -8,6 +8,7 @@ from data.stock_data import StockDataAnalyzer
 from utils.email_sender import StockReportSender
 from config.config_manager import ConfigTools
 from data.tools import logger
+import streamlit as st
 
 # 添加常量配置在文件开头
 OUTPUT_DIR = Path("output")
@@ -151,6 +152,18 @@ class StockMonitor:
         """停止监控"""
         self.is_running = False
         logger.info("监控程序已停止")
+    
+    def get_current_status(self) -> dict:
+        """获取当前监控状态"""
+        return {
+            'is_running': self.is_running,
+            'is_market_time': self.is_market_time(),
+            'previous_stocks_count': len(self.previous_stocks)
+        }
+    
+    def get_latest_data(self) -> pd.DataFrame:
+        """获取最新分析数据"""
+        return self.analyzer.process_and_analyze()
 
 class EmailNotifier:
     """邮件通知类"""
