@@ -40,6 +40,8 @@ class StockMonitor:
         self.previous_file = OUTPUT_FILES['previous_stocks']
         self.is_running = False
         self.email_notifier = EmailNotifier(self.config)
+        self._last_check_time = None
+        self._current_data = None
 
     def _ensure_output_dir(self) -> None:
         """确保输出目录存在"""
@@ -66,31 +68,48 @@ class StockMonitor:
         except Exception as e:
             logger.error(f"保存当前股票记录失败: {str(e)}")
 
-    def check_stocks(self) -> None:
-        """检查股票状态"""
+    def get_latest_data(self) -> pd.DataFrame:
+        """获取最新分析数据，带缓存机制"""
+        current_time = time.time()
+        
+        # 如果距离上次检查未超过间隔时间且有缓存数据，直接返回缓存
+        if (self._last_check_time and 
+            current_time - self._last_check_time < self.check_interval and 
+            self._current_data is not None):
+            return self._current_data
+
         try:
-            result_df = self.analyzer.process_and_analyze()
+            self._current_data = self.analyzer.process_and_analyze()
+            self._last_check_time = current_time
+            return self._current_data
+        except Exception as e:
+            logger.error(f"获取最新数据失败: {str(e)}")
+            return pd.DataFrame()
+
+    def check_stocks(self) -> tuple[pd.DataFrame, set]:
+        """检查股票状态，返回当前数据和新增股票集合"""
+        try:
+            result_df = self.get_latest_data()
             if result_df.empty:
-                logger.info("没有符合条件的股票")
-                return
+                return result_df, set()
 
             current_stocks = set(result_df['股票代码'].tolist())
             new_stocks = current_stocks - self.previous_stocks
             
-            if not new_stocks:
-                logger.info("没有新增股票")
-                return
-
-            new_stocks_df = result_df[result_df['股票代码'].isin(new_stocks)].copy()
-            logger.info(f"发现 {len(new_stocks)} 只新增股票")
+            if new_stocks:
+                new_stocks_df = result_df[result_df['股票代码'].isin(new_stocks)].copy()
+                logger.info(f"发现 {len(new_stocks)} 只新增股票")
+                
+                self.analyzer.save_results(new_stocks_df, "new_stocks.csv")
+                self.email_notifier.send_alerts(new_stocks_df)
+                self.previous_stocks = self.previous_stocks | new_stocks
+                self.save_current_stocks(current_stocks)
             
-            self.analyzer.save_results(new_stocks_df, "new_stocks.csv")
-            self.email_notifier.send_alerts(new_stocks_df)
-            self.previous_stocks = self.previous_stocks | new_stocks
-            self.save_current_stocks(current_stocks)
+            return result_df, new_stocks
                 
         except Exception as e:
             logger.error(f"检查股票状态失败: {str(e)}")
+            return pd.DataFrame(), set()
 
     def is_market_time(self) -> bool:
         """判断是否在交易时间内"""
