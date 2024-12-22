@@ -6,6 +6,7 @@ import logging
 from functools import wraps
 # from config.config_manager import ConfigTools
 from config.config_manager import ConfigTools
+from config.constants import MARKET_CODES
 
 # 配置日志
 logging.basicConfig(
@@ -13,13 +14,6 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
-
-# 市场代码映射
-MARKET_CODES = {
-    "A": "XSHG",
-    "US": "NYSE",
-    "HK": "HKG"
-}
 
 class DataPathManager:
     """数据路径管理类"""

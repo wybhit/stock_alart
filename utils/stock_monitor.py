@@ -1,9 +1,10 @@
 from pathlib import Path
 import pandas as pd
 import time
-from datetime import datetime, time as dt_time
+from datetime import datetime
 from typing import Set
 
+from config.constants import A_MARKET_HOURS
 from data.stock_data import StockDataAnalyzer
 from utils.email_sender import StockReportSender
 from config.config_manager import ConfigTools
@@ -16,11 +17,6 @@ OUTPUT_FILES = {
     'previous_stocks': OUTPUT_DIR / "previous_stocks.csv",
     'new_stocks': OUTPUT_DIR / "new_stocks.csv",
     'result_df': OUTPUT_DIR / "result_df.csv"
-}
-
-MARKET_HOURS = {
-    'morning': (dt_time(9, 30), dt_time(11, 30)),
-    'afternoon': (dt_time(13, 0), dt_time(15, 0))
 }
 
 class StockMonitor:
@@ -115,7 +111,7 @@ class StockMonitor:
         """判断是否在交易时间内"""
         now = datetime.now().time()
         
-        for period_start, period_end in MARKET_HOURS.values():
+        for period_start, period_end in A_MARKET_HOURS.values():
             if period_start <= now <= period_end:
                 return True
         return False

@@ -3,7 +3,8 @@ from typing import Dict, List, Optional
 
 import akshare as ak
 from config.config_manager import ConfigTools
-from data.tools import MARKET_CODES, file_exist_or_get_data, file_exist_or_get_data_decorator, logger
+from config.constants import MARKET_CODES, A_MARKET_HOURS
+from data.tools import file_exist_or_get_data, file_exist_or_get_data_decorator, logger
 
 
 import pandas as pd
@@ -24,31 +25,29 @@ class TradeDateTools:
         self.config = ConfigTools()
         self.last_trade_date = self.get_last_trade_date()
 
-    def get_trade_date(self, range_days: int = 1) -> Optional[str]:
-        """获取交易日期"""
-        try:
-            calendar = get_calendar(self.market)
-            schedule = calendar.schedule(
-                start_date=(datetime.now() - pd.Timedelta(days=range_days)).strftime('%Y%m%d'),
-                end_date=datetime.now().strftime('%Y%m%d')
-            )
-
-            if schedule.empty:
-                return None
-
-            latest_date = schedule.index[-1]
-            market_close = schedule.loc[latest_date, 'market_close']
-            market_open = schedule.loc[latest_date, 'market_open']
-
-            now = datetime.now(market_close.tz)
-
-            if market_open < now < market_close:
-                return market_close.strftime('%Y%m%d')
-            return None
-
-        except Exception as e:
-            logger.error(f"获取交易日期失败: {str(e)}")
-            return None
+    def is_market_time(self, now = None) -> int:
+        """判断是否为交易时间
+        返回0为未开盘
+        返回1为交易中
+        返回2为已收盘
+        返回3为休市
+        """
+        if self.market == "XSHG":
+            time_range = A_MARKET_HOURS
+        else:
+            raise ValueError(f"不支持的市场类型: {self.market}")
+        if now is None:
+            now = datetime.now()
+        for period_start, period_end in time_range:
+            if period_start <= now <= period_end:
+                return 1
+        if now<time_range[0][0]:
+            return 0
+        elif now>time_range[-1][1]:
+            return 2
+        else:
+            return 3
+   
 
     def get_last_trade_date(self, range_days: int = 10) -> str:
         """获取最近的交易日期"""
@@ -56,7 +55,6 @@ class TradeDateTools:
             calendar = get_calendar(self.market)
             end_date = datetime.now().strftime('%Y%m%d')
             start_date = (datetime.now() - pd.Timedelta(days=range_days)).strftime('%Y%m%d')
-            
             schedule = calendar.schedule(start_date=start_date, end_date=end_date)
             
             if schedule.empty:
@@ -318,3 +316,10 @@ class StockDataAnalyzer:
         except Exception as e:
             logger.error(f"保存结果失败: {str(e)}")
             raise
+
+
+
+
+if __name__ == "__main__":
+    trade_date_tools = TradeDateTools()
+    print(trade_date_tools.is_market_time())
