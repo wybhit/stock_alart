@@ -100,10 +100,23 @@ class StockAHistoryData(StockDataProcessor):
     def __init__(self, days: int = 365):
         super().__init__(market="A")
         self.days = max(1, days)  # 确保天数至少为1
+        self.stock_list = self.get_stock_list()
 
     @file_exist_or_get_data_decorator(True, "A")
     def get_stock_daily_history(self, code: str) -> pd.DataFrame:
-        """获取单个股票的历史数据"""
+        """获取单个股票的历史日线数据
+        
+        Args:
+            code (str): 股票代码
+            
+        Returns:
+            pd.DataFrame: 包含股票历史数据的DataFrame，
+            包括日期、开盘价、收盘价、最高价、最低价、成交量、成交额、振幅、涨跌幅、涨跌额、换手率等信息
+            
+        Raises:
+            ValueError: 当未能获取到股票数据时
+            Exception: 其他获取数据过程中的异常
+        """
         try:
             start_date = (datetime.now() - pd.Timedelta(days=self.days)).strftime('%Y%m%d')
             df = ak.stock_zh_a_hist(
@@ -119,16 +132,39 @@ class StockAHistoryData(StockDataProcessor):
         except Exception as e:
             logger.error(f"获取股票{code}历史数据失败: {str(e)}")
             raise
+    
+    @file_exist_or_get_data_decorator(True, "A")
+    def get_stock_list(self) -> pd.DataFrame:
+        """获取股票列表"""
+        return ak.stock_info_a_code_name()
+    
+    def stock_code_name_trans(self, code: str) -> str:
+        """股票代码转换为股票名称
+        
+        Args:
+            code (str): 股票代码
+            
+        Returns:
+            tuple: 包含股票代码和股票名称的元组
+        """
+        if code in self.stock_list['code'].values:
+            return code, self.stock_list[self.stock_list['code'] == code]['name'].values[0]
+        elif code in self.stock_list['name'].values:
+            return self.stock_list[self.stock_list['name'] == code]['code'].values[0],code
+        else:
+            return None
 
-    def process_single_stock(self, code: str, name: str) -> Optional[Dict]:
+    def process_single_stock(self, code: str) -> Optional[Dict]:
         try:
+            code, name = self.stock_code_name_trans(code)
+            
             hist_data = self.get_stock_daily_history(code)
             if hist_data is None or hist_data.empty:
                 logger.warning(f"股票 {code} {name} 未获取到历史数据")
                 return None
 
-            # 确保列名存在
-            required_columns = ['日期', '最高']
+            # 确保列名存在包括日期、开盘价、收盘价、最高价、最低价、成交量、成交额、振幅、涨跌幅、涨跌额、换手率等信息
+            required_columns = ['日期', '开盘', '收盘', '最高', '最低', '成交额', '振幅', '涨跌幅', '涨跌额', '换手率']
             if not all(col in hist_data.columns for col in required_columns):
                 logger.warning(f"股票 {code} {name} 数据格式不正确")
                 return None
@@ -230,6 +266,47 @@ class StockAHistoryData(StockDataProcessor):
         except Exception as e:
             logger.error(f"获取历史最高价格数据失败: {str(e)}")
             raise
+
+class OneStockAnalysis(StockDataProcessor):
+    """单个股票数据分析类"""
+    def __init__(self, df: pd.DataFrame):
+        """包括日期、开盘价、收盘价、最高价、最低价、成交量、成交额、振幅、涨跌幅、涨跌额、换手率等信息"""
+        self.df = df
+    
+    def new_high_analysis(self, n_days_new_high:int = 50, next_n_days:int =10):
+        """新高分析"""
+        new_high_list = []
+        for i in range(len(self.df)-n_days_new_high):
+            # TODO: 检验验证是否正确    
+            if float(self.df.loc[i+n_days_new_high, '最高']) == float(self.df.loc[i:i+n_days_new_high, '最高'].max()):                
+                n_days_high,n_days_low = self.n_days_high_low_analysis(self.df.loc[i+n_days_new_high, '日期'], next_n_days)
+                self.df.loc[i+n_days_new_high, 'n日最大涨幅'] = (n_days_high-float(self.df.loc[i+n_days_new_high, '最高']))/float(self.df.loc[i+n_days_new_high, '最高'])
+                self.df.loc[i+n_days_new_high, 'n日最大跌幅'] = (n_days_low-float(self.df.loc[i+n_days_new_high, '最低']))/float(self.df.loc[i+n_days_new_high, '最低'])
+                new_high_list.append(self.df.loc[i+n_days_new_high])
+        df = pd.DataFrame(new_high_list)
+        return df[['日期','开盘','收盘','最高','最低','n日最大涨幅','n日最大跌幅']]
+    
+    def n_days_high_low_analysis(self, date: str, n: int = 10):
+        """n天内的最高价和最低价分析"""
+        high = 0
+        low = 0
+        date_list = []
+        index = self.df.loc[self.df['日期'] == date].index[0]
+        if index == len(self.df):
+            return "",""
+        else:
+            end_index = min(index+n, len(self.df))
+            for i in range(index, end_index):
+                date_list.append(self.df.loc[i])
+                if high == 0:
+                    high = float(self.df.loc[i, '最高'])
+                if float(self.df.loc[i, '最高']) > high:
+                    high = float(self.df.loc[i, '最高'])
+                if low == 0:
+                    low = float(self.df.loc[i, '最低'])
+                if float(self.df.loc[i, '最低']) < low:
+                    low = float(self.df.loc[i, '最低'])
+            return high, low
 
 
 class StockARealTimeData(StockDataProcessor):
