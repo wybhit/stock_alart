@@ -280,8 +280,9 @@ class OneStockAnalysis(StockDataProcessor):
             # TODO: 检验验证是否正确    
             if float(self.df.loc[i+n_days_new_high, '最高']) == float(self.df.loc[i:i+n_days_new_high, '最高'].max()):                
                 n_days_high,n_days_low = self.n_days_high_low_analysis(self.df.loc[i+n_days_new_high, '日期'], next_n_days)
-                self.df.loc[i+n_days_new_high, 'n日最大涨幅'] = (n_days_high-float(self.df.loc[i+n_days_new_high, '最高']))/float(self.df.loc[i+n_days_new_high, '最高'])
-                self.df.loc[i+n_days_new_high, 'n日最大跌幅'] = (n_days_low-float(self.df.loc[i+n_days_new_high, '最低']))/float(self.df.loc[i+n_days_new_high, '最低'])
+                #保留两位小数
+                self.df.loc[i+n_days_new_high, 'n日最大涨幅'] = round((n_days_high-float(self.df.loc[i+n_days_new_high, '最高']))/float(self.df.loc[i+n_days_new_high, '最高'])*100,2)
+                self.df.loc[i+n_days_new_high, 'n日最大跌幅'] = round((n_days_low-float(self.df.loc[i+n_days_new_high, '最低']))/float(self.df.loc[i+n_days_new_high, '最低'])*100,2)
                 new_high_list.append(self.df.loc[i+n_days_new_high])
         df = pd.DataFrame(new_high_list)
         return df[['日期','开盘','收盘','最高','最低','n日最大涨幅','n日最大跌幅']]
