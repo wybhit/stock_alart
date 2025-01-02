@@ -97,13 +97,15 @@ class StockDataProcessor:
 
 class StockAHistoryData(StockDataProcessor):
     """A股历史数据处理类"""
-    def __init__(self, year: int = 2):
+    def __init__(self, hist_data_year: int = 2, n_days_new_high: int = 250):
         """
         Args:
             year (int): 获取历史数据的年数
         """
         super().__init__(market="A")
-        self.days = year*365  # 确保天数至少为1
+        self.hist_data_year = hist_data_year    
+        self.hist_data_days = self.hist_data_year*365  
+        self.n_days_new_high = n_days_new_high
         self.stock_list = self.get_stock_list()
 
     @file_exist_or_get_data_decorator(True, "A")
@@ -122,7 +124,7 @@ class StockAHistoryData(StockDataProcessor):
             Exception: 其他获取数据过程中的异常
         """
         try:
-            start_date = (datetime.now() - pd.Timedelta(days=self.days)).strftime('%Y%m%d')
+            start_date = (datetime.now() - pd.Timedelta(days=self.hist_data_days)).strftime('%Y%m%d')
             df = ak.stock_zh_a_hist(
                 symbol=code,
                 period="daily",
@@ -158,7 +160,7 @@ class StockAHistoryData(StockDataProcessor):
         else:
             return None
 
-    def process_single_stock(self, code: str, next_n_days: int = 250) -> Optional[Dict]:
+    def process_single_stock(self, code: str ) -> Optional[Dict]:
 
         #TODO: 需要优化250日，365天的关系
         try:
@@ -175,24 +177,25 @@ class StockAHistoryData(StockDataProcessor):
                 logger.warning(f"股票 {code} {name} 数据格式不正确")
                 return None
 
-            if next_n_days > len(hist_data):
-                next_n_days = len(hist_data)
+            n_days = min(self.n_days_new_high, len(hist_data))
             hist_data = hist_data[-next_n_days:].reset_index(drop=True)
 
-            hist_data = self.safe_convert_numeric(hist_data, ['最高'])
-            hist_data = hist_data.dropna(subset=['最高'])
+            # 使用向量化操作进行数值转换和缺失值处理
+            hist_data['最高'] = pd.to_numeric(hist_data['最高'], errors='coerce')
+            hist_data.dropna(subset=['最高'], inplace=True)
 
             if hist_data.empty:
                 return None
 
+            # 使用向量化操作查找最大值索引
             max_price_idx = hist_data['最高'].idxmax()
-            max_date = hist_data.loc[max_price_idx, '日期']
-            days_since_max = len(hist_data) - hist_data.index.get_loc(max_price_idx)
+            max_date = hist_data.at[max_price_idx, '日期']
+            days_since_max = len(hist_data) - max_price_idx
 
             return {
                 '股票代码': code,
                 '股票名称': name,
-                '历史最高': float(hist_data.loc[max_price_idx, '最高']),
+                '历史最高': float(hist_data.at[max_price_idx, '最高']),
                 '历史最高日期': str(max_date),
                 '距今交易日数': int(days_since_max)
             }
@@ -278,21 +281,26 @@ class StockAHistoryData(StockDataProcessor):
 
 class OneStockAnalysis(StockDataProcessor):
     """单个股票数据分析类"""
-    def __init__(self, df: pd.DataFrame):
+    def __init__(self, df: pd.DataFrame, n_days_new_high: int = 250):
         """包括日期、开盘价、收盘价、最高价、最低价、成交量、成交额、振幅、涨跌幅、涨跌额、换手率等信息"""
         self.df = df
-    
-    def new_high_analysis(self, n_days_new_high:int = 250, next_n_days:int =10):
+        self.n_days_new_high = min(n_days_new_high, len(self.df))
+
+    def new_high_analysis(self, next_n_days:int =10):
         """新高分析"""
         new_high_list = []
-        for i in range(len(self.df)-n_days_new_high):
+        for i in range(len(self.df)-self.n_days_new_high):
             # TODO: 检验验证是否正确    
-            if float(self.df.loc[i+n_days_new_high, '最高']) == float(self.df.loc[i:i+n_days_new_high, '最高'].max()):                
-                n_days_high,n_days_low = self.n_days_high_low_analysis(self.df.loc[i+n_days_new_high, '日期'], next_n_days)
+            if float(self.df.loc[i+self.n_days_new_high, '最高']) == float(self.df.loc[i:i+self.n_days_new_high, '最高'].max()):                
+                n_days_high,n_days_low = self.n_days_high_low_analysis(self.df.loc[i+self.n_days_new_high, '日期'], next_n_days)
                 if n_days_high !=""and n_days_low !="":
-                    self.df.loc[i+n_days_new_high, 'n日最大涨幅'] = round((n_days_high-float(self.df.loc[i+n_days_new_high, '最高']))/float(self.df.loc[i+n_days_new_high, '最高'])*100,2)
-                    self.df.loc[i+n_days_new_high, 'n日最大跌幅'] = round((n_days_low-float(self.df.loc[i+n_days_new_high, '最低']))/float(self.df.loc[i+n_days_new_high, '最低'])*100,2)
-                    new_high_list.append(self.df.loc[i+n_days_new_high])
+                    self.df.loc[i+self.n_days_new_high, 'n日最大涨幅'] = round((n_days_high-float(self.df.loc[i+self.n_days_new_high, '最高']))/float(self.df.loc[i+self.n_days_new_high, '最高'])*100,2)
+                    self.df.loc[i+self.n_days_new_high, 'n日最大跌幅'] = round((n_days_low-float(self.df.loc[i+self.n_days_new_high, '最低']))/float(self.df.loc[i+self.n_days_new_high, '最低'])*100,2)
+                    new_high_list.append(self.df.loc[i+self.n_days_new_high])
+        #TODO 继续验证
+        if len(new_high_list) == 0:
+            #返回空的df[['日期','开盘','收盘','最高','最低','n日最大涨幅','n日最大跌幅']]
+            return pd.DataFrame(columns=['日期','开盘','收盘','最高','最低','n日最大涨幅','n日最大跌幅'])
         df = pd.DataFrame(new_high_list)
         return df[['日期','开盘','收盘','最高','最低','n日最大涨幅','n日最大跌幅']]
     
