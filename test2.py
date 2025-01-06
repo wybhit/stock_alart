@@ -5,6 +5,6 @@ if __name__ == "__main__":
 
     # print(stock_data.process_single_stock("601137", 250))
 
-    one_stock_analysis = OneStockAnalysis(stock_data.get_stock_daily_history("601137"), 800
+    one_stock_analysis = OneStockAnalysis(stock_data.get_stock_daily_history("601288"), 250
     )
     print(one_stock_analysis.new_high_analysis(10))

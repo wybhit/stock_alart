@@ -286,17 +286,35 @@ class OneStockAnalysis(StockDataProcessor):
         self.df = df
         self.n_days_new_high = min(n_days_new_high, len(self.df))
 
-    def new_high_analysis(self, next_n_days:int =10):
-        """新高分析"""
+    def new_high_analysis(self, next_n_days:int =10, n_days_next_new_high:int = 10):
+        """
+        参数:
+            next_n_days (int): 分析新高后n天数范围
+            n_days_next_new_high (int): 不再分析新高后n天数范围
+            
+        返回:
+            pd.DataFrame: 包含新高分析结果的DataFrame
+        """
         new_high_list = []
+        new_high_flag = 0
+        next_n_days_high = 0
         for i in range(len(self.df)-self.n_days_new_high):
             # TODO: 检验验证是否正确    
-            if float(self.df.loc[i+self.n_days_new_high, '最高']) == float(self.df.loc[i:i+self.n_days_new_high, '最高'].max()):                
+            if float(self.df.loc[i+self.n_days_new_high, '最高']) == float(self.df.loc[i:i+self.n_days_new_high, '最高'].max()) and new_high_flag == 0:                
                 n_days_high,n_days_low = self.n_days_high_low_analysis(self.df.loc[i+self.n_days_new_high, '日期'], next_n_days)
                 if n_days_high !=""and n_days_low !="":
                     self.df.loc[i+self.n_days_new_high, 'n日最大涨幅'] = round((n_days_high-float(self.df.loc[i+self.n_days_new_high, '最高']))/float(self.df.loc[i+self.n_days_new_high, '最高'])*100,2)
                     self.df.loc[i+self.n_days_new_high, 'n日最大跌幅'] = round((n_days_low-float(self.df.loc[i+self.n_days_new_high, '最低']))/float(self.df.loc[i+self.n_days_new_high, '最低'])*100,2)
                     new_high_list.append(self.df.loc[i+self.n_days_new_high])
+                    new_high_flag = 1
+            if new_high_flag == 1:
+                if next_n_days_high < n_days_next_new_high:
+                   next_n_days_high += 1
+                else:
+                    new_high_flag = 0
+                    next_n_days_high = 0
+                    
+                
         #TODO 继续验证
         if len(new_high_list) == 0:
             #返回空的df[['日期','开盘','收盘','最高','最低','n日最大涨幅','n日最大跌幅']]
