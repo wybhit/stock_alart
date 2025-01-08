@@ -6,7 +6,6 @@ from config.config_manager import ConfigTools
 from config.constants import MARKET_CODES, A_MARKET_HOURS
 from data.tools import file_exist_or_get_data, file_exist_or_get_data_decorator, logger
 
-
 import pandas as pd
 from pandas_market_calendars import get_calendar
 
@@ -177,7 +176,7 @@ class StockAHistoryData(StockDataProcessor):
                 logger.warning(f"股票 {code} {name} 数据格式不正确")
                 return None
 
-            n_days = min(self.n_days_new_high, len(hist_data))
+            next_n_days = min(self.n_days_new_high, len(hist_data))
             hist_data = hist_data[-next_n_days:].reset_index(drop=True)
 
             # 使用向量化操作进行数值转换和缺失值处理
@@ -279,19 +278,17 @@ class StockAHistoryData(StockDataProcessor):
             logger.error(f"获取历史最高价格数据失败: {str(e)}")
             raise
 
-class OneStockAnalysis(StockDataProcessor):
+class StockNewHighAnalysis(StockDataProcessor):
     """单个股票数据分析类"""
-    def __init__(self, df: pd.DataFrame, n_days_new_high: int = 250):
+    def __init__(self, df: pd.DataFrame, n_days_new_high: int = 250, next_n_days: int = 10, n_days_next_new_high: int = 10):
         """包括日期、开盘价、收盘价、最高价、最低价、成交量、成交额、振幅、涨跌幅、涨跌额、换手率等信息"""
         self.df = df
         self.n_days_new_high = min(n_days_new_high, len(self.df))
+        self.next_n_days = next_n_days
+        self.n_days_next_new_high = n_days_next_new_high
 
-    def new_high_analysis(self, next_n_days:int =10, n_days_next_new_high:int = 10):
+    def new_high_next_n_days_df(self):
         """
-        参数:
-            next_n_days (int): 分析新高后n天数范围
-            n_days_next_new_high (int): 不再分析新高后n天数范围
-            
         返回:
             pd.DataFrame: 包含新高分析结果的DataFrame
         """
@@ -301,26 +298,51 @@ class OneStockAnalysis(StockDataProcessor):
         for i in range(len(self.df)-self.n_days_new_high):
             # TODO: 检验验证是否正确    
             if float(self.df.loc[i+self.n_days_new_high, '最高']) == float(self.df.loc[i:i+self.n_days_new_high, '最高'].max()) and new_high_flag == 0:                
-                n_days_high,n_days_low = self.n_days_high_low_analysis(self.df.loc[i+self.n_days_new_high, '日期'], next_n_days)
+                n_days_close,n_days_high,n_days_low = self.n_days_high_low_analysis(self.df.loc[i+self.n_days_new_high, '日期'], self.next_n_days)
                 if n_days_high !=""and n_days_low !="":
-                    self.df.loc[i+self.n_days_new_high, 'n日最大涨幅'] = round((n_days_high-float(self.df.loc[i+self.n_days_new_high, '最高']))/float(self.df.loc[i+self.n_days_new_high, '最高'])*100,2)
-                    self.df.loc[i+self.n_days_new_high, 'n日最大跌幅'] = round((n_days_low-float(self.df.loc[i+self.n_days_new_high, '最低']))/float(self.df.loc[i+self.n_days_new_high, '最低'])*100,2)
+                    self.df.loc[i+self.n_days_new_high, 'n日后涨跌幅'] = n_days_close
+                    self.df.loc[i+self.n_days_new_high, 'n日最大涨幅'] = n_days_high
+                    self.df.loc[i+self.n_days_new_high, 'n日最大跌幅'] = n_days_low
                     new_high_list.append(self.df.loc[i+self.n_days_new_high])
                     new_high_flag = 1
             if new_high_flag == 1:
-                if next_n_days_high < n_days_next_new_high:
+                if next_n_days_high < self.n_days_next_new_high:
                    next_n_days_high += 1
                 else:
                     new_high_flag = 0
                     next_n_days_high = 0
-                    
-                
         #TODO 继续验证
         if len(new_high_list) == 0:
             #返回空的df[['日期','开盘','收盘','最高','最低','n日最大涨幅','n日最大跌幅']]
             return pd.DataFrame(columns=['日期','开盘','收盘','最高','最低','n日最大涨幅','n日最大跌幅'])
         df = pd.DataFrame(new_high_list)
-        return df[['日期','开盘','收盘','最高','最低','n日最大涨幅','n日最大跌幅']]
+        
+        return df[['日期','开盘','收盘','最高','最低','n日后涨跌幅','n日最大涨幅','n日最大跌幅']]
+
+    def new_high_next_n_days_analysis(self):
+        """
+        返回:
+            pd.DataFrame: 包含新高分析结果的DataFrame
+        """
+        
+        df = self.new_high_next_n_days_df()
+        print(df)
+        print(len(df))
+        print(len(df[df['n日后涨跌幅']>0]))
+        print(len(df[df['n日最大涨幅']>0]))
+        print(round(df['n日最大涨幅'].mean(),2))
+        print(round(df['n日最大跌幅'].mean(),2))
+        # dic ={
+        #     f'{self.n_days_new_high}日新高天数':len(df),
+        #     f'新高后大涨幅为正天数':,
+        #     f'{self.n_days_new_high}新高后{self.next_n_days}天最大跌幅':[],
+        #     f'{self.n_days_new_high}新高后{self.next_n_days}天最大涨幅天数':[],
+        #     f'{self.n_days_new_high}新高后{self.next_n_days}天最大跌幅天数':[],
+        # }
+        
+        
+        return df
+
     
     def n_days_high_low_analysis(self, date: str, n: int = 10) -> tuple:
         """分析指定日期后n天内的最高价和最低价
@@ -330,19 +352,23 @@ class OneStockAnalysis(StockDataProcessor):
             n (int): 分析的天数范围
         
         返回:
-            tuple: 包含n天内最高价和最低价的元组
+            tuple: 包含n天内开盘价、收盘价、最高价、最低价
         """
         try:
             index = self.df.loc[self.df['日期'] == date].index[0]
         except IndexError:
             return "", ""  # 如果日期不在数据中，返回空字符串
         if index+1 == len(self.df): 
-            return "",""
+            return "","",""
         else:
             end_index = min(index + n, len(self.df))
             next_n_days_data = self.df.iloc[index:end_index]
-            return float(next_n_days_data['最高'].max()), float(next_n_days_data['最低'].min())
-
+            
+            #next_n_days_data 最后一日收盘价        
+            n_days_close = round((float(next_n_days_data.iloc[-1]['收盘'])/float(next_n_days_data.iloc[0]['最高'])-1)*100,2)
+            n_days_high = round((float(next_n_days_data['最高'].max())/float(next_n_days_data.iloc[0]['最高'])-1)*100,2)
+            n_days_low = round((float(next_n_days_data['最低'].min())/float(next_n_days_data.iloc[0]['最高'])-1)*100,2)
+            return n_days_close,n_days_high,n_days_low
 
 
 class StockARealTimeData(StockDataProcessor):
@@ -436,3 +462,4 @@ class StockDataAnalyzer:
 if __name__ == "__main__":
     trade_date_tools = TradeDateTools()
     print(trade_date_tools.is_market_time())
+
