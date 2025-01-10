@@ -80,13 +80,13 @@ class TradeDateTools:
             raise
 
 
-class StockDataProcessor:
+class DFConvert:
     """股票数据处理基类"""
-    def __init__(self, market: str = "A"):
-        self.data_tools = TradeDateTools(market)
-        self.last_trade_date = self.data_tools.last_trade_date
-
-    def safe_convert_numeric(self, df: pd.DataFrame, columns: List[str]) -> pd.DataFrame:
+    def __init__(self):
+        pass
+    
+    @staticmethod
+    def safe_convert_numeric(df: pd.DataFrame, columns: List[str]) -> pd.DataFrame:
         """安全地转换数值类型"""
         for col in columns:
             if col in df.columns:
@@ -94,14 +94,15 @@ class StockDataProcessor:
         return df
 
 
-class StockAHistoryData(StockDataProcessor):
+class StockAHistoryData():
     """A股历史数据处理类"""
-    def __init__(self, hist_data_year: int = 2, n_days_new_high: int = 250):
+    def __init__(self, market: str = "A",hist_data_year: int = 2, n_days_new_high: int = 250):
         """
         Args:
             year (int): 获取历史数据的年数
         """
-        super().__init__(market="A")
+        self.data_tools = TradeDateTools(market)
+        self.last_trade_date = self.data_tools.last_trade_date
         self.hist_data_year = hist_data_year    
         self.hist_data_days = self.hist_data_year*365  
         self.n_days_new_high = n_days_new_high
@@ -278,7 +279,7 @@ class StockAHistoryData(StockDataProcessor):
             logger.error(f"获取历史最高价格数据失败: {str(e)}")
             raise
 
-class StockNewHighAnalysis(StockDataProcessor):
+class StockNewHighAnalysis():
     """单个股票数据分析类"""
     def __init__(self, df: pd.DataFrame, n_days_new_high: int = 250, next_n_days: int = 10, n_days_next_new_high: int = 10):
         """包括日期、开盘价、收盘价、最高价、最低价、成交量、成交额、振幅、涨跌幅、涨跌额、换手率等信息"""
@@ -326,22 +327,19 @@ class StockNewHighAnalysis(StockDataProcessor):
         """
         
         df = self.new_high_next_n_days_df()
-        print(df)
-        print(len(df))
-        print(len(df[df['n日后涨跌幅']>0]))
-        print(len(df[df['n日最大涨幅']>0]))
-        print(round(df['n日最大涨幅'].mean(),2))
-        print(round(df['n日最大跌幅'].mean(),2))
-        # dic ={
-        #     f'{self.n_days_new_high}日新高天数':len(df),
-        #     f'新高后大涨幅为正天数':,
-        #     f'{self.n_days_new_high}新高后{self.next_n_days}天最大跌幅':[],
-        #     f'{self.n_days_new_high}新高后{self.next_n_days}天最大涨幅天数':[],
-        #     f'{self.n_days_new_high}新高后{self.next_n_days}天最大跌幅天数':[],
-        # }
-        
-        
-        return df
+        if df.empty:
+            return None
+        else:
+            dic ={
+                f'{self.n_days_new_high}日新高天数次数':len(df),
+                f'{self.n_days_new_high}日新高后{self.next_n_days}天上涨次数':len(df[df['n日后涨跌幅']>0]),
+                f'{self.n_days_new_high}日新高后{self.next_n_days}天上涨平均涨幅':round(df['n日后涨跌幅'].mean(),2),
+                f'{self.n_days_new_high}日新高后{self.next_n_days}天上涨最大涨幅为正次数':len(df[df['n日最大涨幅']>0]),
+                f'{self.n_days_new_high}日新高后{self.next_n_days}天上涨平均最大涨幅':round(df['n日最大涨幅'].mean(),2),
+                f'{self.n_days_new_high}日新高后{self.next_n_days}天上涨最大涨幅为负次数':len(df[df['n日最大跌幅']<0]),
+                f'{self.n_days_new_high}日新高后{self.next_n_days}天上涨平均最大跌幅':round(df['n日最大跌幅'].mean(),2),
+            }     
+            return dic
 
     
     def n_days_high_low_analysis(self, date: str, n: int = 10) -> tuple:
@@ -363,15 +361,21 @@ class StockNewHighAnalysis(StockDataProcessor):
         else:
             end_index = min(index + n, len(self.df))
             next_n_days_data = self.df.iloc[index:end_index]
-            
-            #next_n_days_data 最后一日收盘价        
+            print(next_n_days_data)
+            next_n_days_data = DFConvert().safe_convert_numeric(next_n_days_data, ['收盘', '最高', '最低'])
+            #next_n_days_data 最后一日收盘价      
+            #TODO:数据格式不对
+            # n_days_close = float(next_n_days_data.iloc[-1]['收盘'])
+            # n_days_high = float(next_n_days_data['最高'].max())
+            # n_days_low =float(next_n_days_data['最低'].min())
+            # print(n_days_close,n_days_high,n_days_low)
             n_days_close = round((float(next_n_days_data.iloc[-1]['收盘'])/float(next_n_days_data.iloc[0]['最高'])-1)*100,2)
             n_days_high = round((float(next_n_days_data['最高'].max())/float(next_n_days_data.iloc[0]['最高'])-1)*100,2)
             n_days_low = round((float(next_n_days_data['最低'].min())/float(next_n_days_data.iloc[0]['最高'])-1)*100,2)
             return n_days_close,n_days_high,n_days_low
 
 
-class StockARealTimeData(StockDataProcessor):
+class StockARealTimeData():
     """A股实时数据处理类"""
     def get_realtime_data(self) -> pd.DataFrame:
         """获取实时行情数据"""
@@ -420,7 +424,7 @@ class StockDataAnalyzer:
 
             # 转换数据类型并处理异常值
             numeric_columns = ['历史最高', '最高', '流通市值']
-            result_df = StockDataProcessor().safe_convert_numeric(result_df, numeric_columns)
+            result_df = DFConvert().safe_convert_numeric(result_df, numeric_columns)
             
             # 移除异常值
             result_df = result_df[result_df['历史最高'] > 0]
