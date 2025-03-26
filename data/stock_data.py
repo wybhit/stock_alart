@@ -3,7 +3,7 @@ from typing import Dict, List, Optional
 
 import akshare as ak
 from config.config_manager import ConfigTools
-from config.constants import MARKET_CODES, A_MARKET_HOURS
+from config.constants import MARKET_CODES, MARKET_HOURS
 from data.tools import file_exist_or_get_data, file_exist_or_get_data_decorator, logger
 
 import pandas as pd
@@ -12,6 +12,37 @@ from pandas_market_calendars import get_calendar
 
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
+
+class MarketTimeTools:
+    """市场时间工具类"""
+    def __init__(self, market: str = "A"):
+        self.market = MARKET_CODES[market]
+    
+    def is_market_time(self, now: Optional[datetime] = None) -> int:
+        """判断是否为交易时间
+        返回0为未开盘
+        返回1为交易中
+        返回-1为已收盘
+        """
+        if self.market not in MARKET_HOURS.keys():
+            raise ValueError(f"不支持的市场类型: {self.market}")
+        else:
+            time_range = MARKET_HOURS[self.market]
+
+
+        now_time = datetime.now().time()
+        
+        for (period_start, period_end) in time_range:
+            if period_start <= now_time <= period_end:
+                return 1
+            
+        if now_time < time_range[0][0]:
+            return 0
+        elif now_time > time_range[-1][1]: 
+            return -1
+        else:
+            return 
+
 
 
 class TradeDateTools:
@@ -23,31 +54,7 @@ class TradeDateTools:
         self.market = MARKET_CODES[market]
         self.config = ConfigTools()
         self.last_trade_date = self.get_last_trade_date()
-
-    def is_market_time(self, now = None) -> int:
-        """判断是否为交易时间
-        返回0为未开盘
-        返回1为交易中
-        返回2为已收盘
-        返回3为休市
-        """
-        if self.market == "XSHG":
-            time_range = A_MARKET_HOURS
-        else:
-            raise ValueError(f"不支持的市场类型: {self.market}")
-        if now is None:
-            now = datetime.now()
-        for period_start, period_end in time_range:
-            if period_start <= now <= period_end:
-                return 1
-        if now<time_range[0][0]:
-            return 0
-        elif now>time_range[-1][1]:
-            return 2
-        else:
-            return 3
    
-
     def get_last_trade_date(self, range_days: int = 10) -> str:
         """获取最近的交易日期"""
         try:
@@ -110,8 +117,7 @@ class StockAHistoryData():
 
     @file_exist_or_get_data_decorator(True, "A")
     def get_stock_daily_history(self, code: str) -> pd.DataFrame:
-        """获取单个股票的历史日线数据
-        
+        """获取单个股票的历史日线数据   
         Args:
             code (str): 股票代码
             
@@ -132,6 +138,7 @@ class StockAHistoryData():
                 end_date=self.last_trade_date,
                 adjust="qfq"
             )
+            # print(df)
             if df.empty:
                 raise ValueError(f"未获取到股票{code}的数据")
             return df
@@ -463,7 +470,4 @@ class StockDataAnalyzer:
 
 
 
-if __name__ == "__main__":
-    trade_date_tools = TradeDateTools()
-    print(trade_date_tools.is_market_time())
 

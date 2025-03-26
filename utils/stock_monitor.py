@@ -10,6 +10,7 @@ from utils.email_sender import StockReportSender
 from config.config_manager import ConfigTools
 from data.tools import logger
 import streamlit as st
+from data.stock_data import TradeDateTools,MarketTimeTools
 
 # 添加常量配置在文件开头
 OUTPUT_DIR = Path("output")
@@ -38,6 +39,7 @@ class StockMonitor:
         self.email_notifier = EmailNotifier(self.config)
         self._last_check_time = None
         self._current_data = None
+        self.market_time_tools = MarketTimeTools()
 
     def _ensure_output_dir(self) -> None:
         """确保输出目录存在"""
@@ -107,14 +109,6 @@ class StockMonitor:
             logger.error(f"检查股票状态失败: {str(e)}")
             return pd.DataFrame(), set()
 
-    def is_market_time(self) -> bool:
-        """判断是否在交易时间内"""
-        now = datetime.now().time()
-        
-        for period_start, period_end in A_MARKET_HOURS.values():
-            if period_start <= now <= period_end:
-                return True
-        return False
 
     def clean_output_files(self) -> None:
         """清理输出文件"""
@@ -149,11 +143,12 @@ class StockMonitor:
 
         while self.is_running:
             try:
-                if self.is_market_time():
+                if self.market_time_tools.is_market_time() == 1:
                     self.check_stocks()
                 else:
                     logger.info("当前不在交易时间")
-                
+                    self.stop()
+                    
                 logger.info("等待下一次检查...")
                 time.sleep(self.check_interval)
                 
@@ -172,7 +167,7 @@ class StockMonitor:
         """获取当前监控状态"""
         return {
             'is_running': self.is_running,
-            'is_market_time': self.is_market_time(),
+            'is_market_time': self.market_time_tools.is_market_time(),
             'previous_stocks_count': len(self.previous_stocks)
         }
     

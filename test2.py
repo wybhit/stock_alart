@@ -1,18 +1,17 @@
 from data.stock_data import StockAHistoryData, StockNewHighAnalysis
-
 import streamlit as st
 from data.stock_data import DFConvert
 import plotly.graph_objects as go
 
 
-def plot_line_with_vlines(df, x_column, y_column, vline_x_positions, title=""):
+def plot_line_with_vlines(df, x_column, y_columns, vline_x_positions, title=""):
     """
     创建带有垂直线的折线图
     
     Args:
         df: DataFrame 包含要绘制的数据
         x_column: x轴列名
-        y_column: y轴列名
+        y_column: y轴列名列表
         vline_x_positions: 要添加垂直线的x轴位置列表
         title: 图表标题
     """
@@ -20,14 +19,10 @@ def plot_line_with_vlines(df, x_column, y_column, vline_x_positions, title=""):
     fig = go.Figure()
     
     # 添加主要折线
-    fig.add_trace(
-        go.Scatter(
-            x=df[x_column],
-            y=df[y_column],
-            mode='lines',
-            name='价格'
-        )
-    )
+    for y_column in y_columns:
+        fig.add_trace(go.Scatter(x=df[x_column], y=df[y_column], mode='lines', name=y_column))
+    
+
     
     # 添加垂直线
     for x_pos in vline_x_positions:
@@ -46,14 +41,13 @@ def plot_line_with_vlines(df, x_column, y_column, vline_x_positions, title=""):
         yaxis_title=y_column,
         showlegend=True
     )
-    
+
+
     # 显示图表
     st.plotly_chart(fig)
 
 
 stock_data = StockAHistoryData()
-
-# print(stock_data.process_single_stock("601137", 250))
 
 #要求输入股票代码
 stock_code = st.text_input("请输入股票代码",value="601137")
@@ -78,7 +72,9 @@ st.dataframe(df2)
 #取df1的最后250行
 df3 = df1.tail(250)
 
-plot_line_with_vlines(df3,"日期","最高",df2.loc[:,"日期"])
+
+
+plot_line_with_vlines(df3,"日期",["最高","最低"],df2.loc[:,"日期"])
 
 
 
