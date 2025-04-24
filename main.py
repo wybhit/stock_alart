@@ -10,7 +10,7 @@ def main():
         if market_time_tools.is_market_time() == 1:
             monitor.start()
         else:
-            time.sleep(30)
+            time.sleep(300)
 
 if __name__ == "__main__":
     main()
