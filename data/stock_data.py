@@ -8,7 +8,7 @@ from data.tools import file_exist_or_get_data, file_exist_or_get_data_decorator,
 
 import pandas as pd
 from pandas_market_calendars import get_calendar
-
+import requests
 
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -131,6 +131,8 @@ class StockAHistoryData():
         """
         try:
             start_date = (datetime.now() - pd.Timedelta(days=self.hist_data_days)).strftime('%Y%m%d')
+            ak.session = requests.Session()
+            ak.session.headers.update({"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36"})
             df = ak.stock_zh_a_hist(
                 symbol=code,
                 period="daily",
